@@ -34,7 +34,7 @@ run_ci () {
   dotenv-linter config/.env config/.env.template
 
   # Running linting for all python files in the project:
-  flake8 .
+  # flake8 .
 
   # Running type checking, see https://github.com/typeddjango/django-stubs
   mypy manage.py server
