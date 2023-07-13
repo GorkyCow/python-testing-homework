@@ -35,7 +35,7 @@ def test_login_invalid(
 ):
     """Test a unregistred user and a user with wring password can not login."""
     post_data = signup_user | {
-        invalid_field: invalid_value,  # type: ignore[arg-type]
+        invalid_field: invalid_value,
     }
 
     response = client.post(reverse("identity:login"), data=post_data)

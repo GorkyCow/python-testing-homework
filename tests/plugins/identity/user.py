@@ -2,6 +2,7 @@ import datetime
 from typing import Callable, Dict, Protocol, TypedDict, final
 
 import pytest
+from django_fakery.faker_factory import Factory
 from mimesis.schema import Field, Schema
 from typing_extensions import TypeAlias, Unpack
 
@@ -44,7 +45,7 @@ class RegistrationData(UserData, total=False):
 
 
 @final
-class RegistrationDataFactory(Protocol):
+class RegistrationDataFactory(Protocol):  # type: ignore[misc]
     def __call__(
         self,
         **fields: Unpack[RegistrationData],
@@ -52,14 +53,7 @@ class RegistrationDataFactory(Protocol):
         """User data factory protocol."""
 
 
-@pytest.fixture()
-def mf(faker_seed: int) -> Field:
-    """Returns the current mimesis `Field`."""
-
-    return Field(seed=faker_seed)
-
-
-@pytest.fixture()
+@pytest.fixture(scope="function")
 def registration_data_factory(
     mf: Field,
 ) -> RegistrationDataFactory:
@@ -87,7 +81,7 @@ def registration_data_factory(
     return factory
 
 
-@pytest.fixture()
+@pytest.fixture(scope="function")
 def registration_data(
     registration_data_factory: RegistrationDataFactory,
 ) -> RegistrationData:
@@ -114,7 +108,7 @@ def assert_correct_user() -> UserAssertion:
     return factory
 
 
-@pytest.fixture()
+@pytest.fixture(scope="function")
 def user_data(registration_data: "RegistrationData") -> "UserData":
     """
     We need to simplify registration data to drop passwords.
@@ -128,7 +122,7 @@ def user_data(registration_data: "RegistrationData") -> "UserData":
     }
 
 
-@pytest.fixture()
+@pytest.fixture(scope="function")
 def expected_user_data(
     registration_data: "RegistrationData",
 ) -> "UserData":
@@ -140,7 +134,7 @@ def expected_user_data(
     }
 
 
-@pytest.fixture()
+@pytest.fixture(scope="function")
 def signedup_data(registration_data: "RegistrationData") -> "SignedUpData":
     return {  # type: ignore [return-value]
         ("password" if key_name.startswith("password") else key_name): value_part
@@ -148,28 +142,76 @@ def signedup_data(registration_data: "RegistrationData") -> "SignedUpData":
     }
 
 
-@pytest.fixture()
-def signup_user(signedup_data: "SignedUpData") -> Dict[str, str]:
-    User.objects.create_user(**signedup_data)
-    return {  # type: ignore
+@pytest.fixture(scope="function")
+def created_user(signedup_data: "SignedUpData") -> User:
+    return User.objects.create_user(**signedup_data)
+
+
+@pytest.fixture(scope="function")
+def signup_user(signedup_data: "SignedUpData", created_user: "User") -> Dict[str, str]:
+    # User.objects.create_user(**signedup_data)
+    return {
         "username": signedup_data["email"],
         "password": signedup_data["password"],
     }
 
 
-@pytest.fixture()
+@pytest.fixture(scope="function")
 def user_email(mf) -> str:
     """Email of the current user."""
     return mf("person.email")
 
 
-@pytest.fixture()
+@pytest.fixture(scope="function")
 def default_password(mf) -> str:
     """Default password for user factory."""
     return mf("person.password")
 
 
-@pytest.fixture()
+@pytest.fixture(scope="function")
 def user_password(default_password) -> str:
     """Password of the current user."""
     return default_password
+
+
+@final
+class UserFactory(Protocol):  # type: ignore[misc]
+    """A factory to generate a `User` instance."""
+
+    def __call__(self, **fields) -> User:
+        """Profile data factory protocol."""
+
+
+@pytest.fixture(scope="function")
+def user_factory(
+    fakery: Factory[User],
+    faker_seed: int,
+    default_password: str,
+) -> UserFactory:
+    """Creates a factory to generate a user instance."""
+    def factory(**fields):
+        password = fields.pop('password', default_password)
+        return fakery.make(  # type: ignore[call-overload]
+            model=User,
+            fields=fields,
+            seed=faker_seed,
+            pre_save=[lambda _user: _user.set_password(password)],
+        )
+    return factory
+
+
+@pytest.fixture(scope="function")
+def user(
+    user_factory: UserFactory,
+    user_email: str,
+    user_password: str,
+) -> User:
+    """The current user.
+    The fixtures `user_email` and `user_password` are used
+    as email and password of the user correspondingly.
+    """
+    return user_factory(
+        email=user_email,
+        password=user_password,
+        is_active=True,
+    )
